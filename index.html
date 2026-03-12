@@ -428,6 +428,16 @@
     .modal-actions button.cancel {
       background: #43555f;
     }
+
+    .cloud-status {
+      text-align: center;
+      padding: 10px;
+      margin: 10px 20px;
+      border-radius: 30px;
+      background: #1f2b33;
+      color: #ffb687;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -448,6 +458,8 @@
     <button class="owner-btn" id="ownerBtn">🔒</button>
   </div>
 </div>
+
+<div id="cloudStatus" class="cloud-status"></div>
 
 <div class="menu-grid" id="menu"></div>
 
@@ -485,14 +497,14 @@
     <h3>⚙️ admin panel</h3>
     <div class="admin-row">
       <input type="text" id="newName" placeholder="dish name">
-      <input type="number" id="newPrice" placeholder="price">
+      <input type="number" id="newPrice" placeholder="price (numbers only)">
       <input type="url" id="newImage" placeholder="image URL">
     </div>
     <div style="display: flex; gap: 10px; flex-wrap: wrap;">
       <button class="admin-btn" id="addBtn">➕ add item</button>
-      <button class="admin-btn save-btn" id="saveBtn">💾 save to cloud</button>
+      <button class="admin-btn save-btn" id="saveBtn">☁️ SAVE TO CLOUD</button>
     </div>
-    <p style="color: #aaa; margin-top: 15px;">Changes save to cloud - all devices update on refresh!</p>
+    <p style="color: #ffb687; margin-top: 15px;">⚠️ YOU MUST CLICK SAVE FOR ALL DEVICES TO SEE CHANGES!</p>
   </div>
 </div>
 
@@ -508,37 +520,62 @@
 </div>
 
 <script>
-  const STORAGE_KEY = "goaMenu";
   const OWNER_PHONE = "7030159762";
   const CORRECT_PASS = "1234";
-
+  
+  // CLOUD STORAGE - This saves to the internet!
+  const BIN_ID = "67d2b9e68a456b79667a1f2a";
+  
   let foods = [];
   let cart = [];
   let isAdmin = false;
 
-  function loadMenu() {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        foods = JSON.parse(saved);
-      } catch (e) {
-        foods = [];
-      }
-    }
-    
-    if (!foods || foods.length === 0) {
+  function showStatus(msg) {
+    const status = document.getElementById('cloudStatus');
+    status.style.display = 'block';
+    status.textContent = msg;
+    setTimeout(() => {
+      status.style.display = 'none';
+    }, 3000);
+  }
+
+  // LOAD FROM CLOUD (HTTPS)
+  async function loadFromCloud() {
+    try {
+      showStatus('Loading menu...');
+      const response = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`);
+      const data = await response.json();
+      foods = data.record.foods || [];
+      renderMenu();
+      showStatus('✅ Menu loaded');
+    } catch (error) {
+      // Default menu if cloud fails
       foods = [
         { name: "Goan Fish Curry", price: 250, img: "https://images.unsplash.com/photo-1559314809-0d155014e29e?w=400" },
         { name: "Chicken Noodles", price: 190, img: "https://images.unsplash.com/photo-1585032226651-759b368d7246?w=400" },
         { name: "Butter Chicken", price: 280, img: "https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?w=400" }
       ];
+      renderMenu();
     }
-    renderMenu();
   }
 
-  function saveMenu() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(foods));
-    alert('✅ Menu saved! All devices will see changes on refresh.');
+  // SAVE TO CLOUD (HTTPS)
+  async function saveToCloud() {
+    try {
+      showStatus('Saving to cloud...');
+      const response = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ foods: foods })
+      });
+      
+      if (response.ok) {
+        showStatus('✅ SAVED! All devices will see changes!');
+        alert('✅ SAVED TO CLOUD!\n\nRefresh any device to see the same menu.');
+      }
+    } catch (error) {
+      alert('❌ Save failed');
+    }
   }
 
   function renderMenu() {
@@ -566,8 +603,8 @@
     if (!isAdmin) return;
     if (confirm('Delete this item?')) {
       foods.splice(index, 1);
-      saveMenu();
       renderMenu();
+      showStatus('Item deleted. Click SAVE TO CLOUD to make permanent.');
     }
   };
 
@@ -667,21 +704,26 @@
     }
     
     foods.push({ name, price, img });
-    saveMenu();
     renderMenu();
     
     document.getElementById('newName').value = '';
     document.getElementById('newPrice').value = '';
     document.getElementById('newImage').value = '';
+    
+    showStatus('Item added. Click SAVE TO CLOUD to make permanent!');
   };
 
   document.getElementById('saveBtn').onclick = function() {
     if (!isAdmin) return;
-    saveMenu();
+    saveToCloud();
   };
 
-  loadMenu();
+  // Load from cloud on start
+  loadFromCloud();
   updateCart();
+
+  // Auto-refresh every 30 seconds to check for cloud changes
+  setInterval(loadFromCloud, 30000);
 </script>
 </body>
 </html>
